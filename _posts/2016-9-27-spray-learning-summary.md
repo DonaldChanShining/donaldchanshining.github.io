@@ -1,5 +1,8 @@
-# spray学习小结
-
+---
+layout: post
+title: spray学习小结
+---
+ 
 此文为io.kamon上一篇对于[spray-client](http://kamon.io/teamblog/2014/11/02/understanding-spray-client-timeout-settings) 
 的工作机制说明，翻译下来以供后来者方便理解其工作机制，对以后使用Akka-Http也大有裨益。
 
