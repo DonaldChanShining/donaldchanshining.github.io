@@ -1,5 +1,5 @@
 ---
-layout: post
+layout: page
 title: spray学习小结
 ---
  
