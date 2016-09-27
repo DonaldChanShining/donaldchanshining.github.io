@@ -94,7 +94,7 @@
 第二个问题是，为何一个请求能够耗时30s去完成而`spray.can.client.request-timeout`是默认被设置为20s的？这个文档在开始说的很清楚，
 **这里的计时器不会开始计时直到连接处于正在接收响应的状态，也就是说计时可能始于后端应用接收请求后一段时间**，但是这里的
 **一段时间**是多长？好吧，这依赖于Spray Client工作引擎下的一些条件，通过这一小段很难弄清楚究竟发生了什么。    
-![Alt text](/images/spray.jpg)
+![Alt text](http://donaldhome.com/images/spray.jpg)
 
 下面描述一下上图中的流程：  
    
