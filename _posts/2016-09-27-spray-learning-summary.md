@@ -1,6 +1,6 @@
 ---
-layout: page
-title: spray学习小结
+layout: default
+title: Spray Learning Summary
 ---
  
 此文为io.kamon上一篇对于[spray-client](http://kamon.io/teamblog/2014/11/02/understanding-spray-client-timeout-settings) 
