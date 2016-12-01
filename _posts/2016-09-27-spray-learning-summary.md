@@ -1,12 +1,47 @@
 ---
 layout: default
-title: Spray Learning Summary
+title: Spray学习总结
 ---
- 
-此文为io.kamon上一篇对于[spray-client](http://kamon.io/teamblog/2014/11/02/understanding-spray-client-timeout-settings) 
-的工作机制说明，翻译下来以供后来者方便理解其工作机制，对以后使用Akka-Http也大有裨益。
 
-## 客户端配置说明
+## spray是什么
+spray是一个基于akka的轻量级的scala库，并提供服务端和客户端的REST形式的HTTP支持。
+#### 设计原则
+1.全异步，无锁  
+2.基于Akka的Actor模型和Future  
+3.高性能（特别体现在Spray低层次的组件设计上，可以在高负载的情况下高性能的运行）  
+4.轻量级  
+5.模块化，松耦合  
+#### 使用背景
+笔者陆陆续续使用spray一年的过程中，主要是基于spray-routing和spray-can搭建应用为其他应用提供rest服务，
+使用过程中因为忽视了Spray-can的配置出现过一些问题，所以必须理解Spray中一些配置的含义，才能够更好更高效的
+使用和进行性能调优。本文会着重介绍spray-can的客户端的配置和spray对于配置的相关处理方式，理解相关的概念对
+日后akka-http的使用也有一定的帮助。
+
+## 小议spray-can
+spray-can模块是基于spray-io开发的低层次，低开销，高性能的http服务端和客户端。服务端和客户端都是纯异步，无锁，完全用scala编写（基于Akka）.
+因为API的核心都围绕着Akka的抽象类型编写（如Actor和Future），所以spray-can可以很容易的集成到我们基于Akka的应用当中。
+#### Http服务端
+spray-can的http服务端是嵌入式的，基于actor模型，完全异步的，低层次低开销高性能的HTTP/1.1的服务端，通过Akka-io/spray-io来实现。  
+服务端的作用域瞄准在必要的高效的HTTP/1.1的服务端。可以拥有以下特性：  
+a.管理连接  
+b.消息解析和头信息隔离  
+c.超时管理（包括请求的超时和连接的超时）  
+d.响应顺序（为了透明的支持pipelining）  
+spray-can并没有经典http服务端的核心特性（如请求路由，文件服务，压缩等），这些特性会在更高层次的包中实现。除了这些通常的考虑，
+这种设计能够保持服务端轻量级，同时能被简单的理解和掌握。这也使spray-can服务端成为一个完美的web容器来容纳使用spray-routing的应用，
+因为它们两者能够很好的互补和使用彼此的接口。
+#### Http客户端
+spray-can的客户端实现上拥有着和服务端同样的优势（无锁，纯异步orz）。此外提供了三种不同层次的抽象供用户使用，抽象层次从低到高：  
+###### Connection-level  
+用户完全掌握http连接的打开/关闭和期间进入的请求如何传递，处理，由哪个连接返回响应。提供了最高的灵活性，同时也带来了最低的便利性。  
+     
+###### Host-level  
+让spray-can管理特定host的连接池  
+###### Request-level  
+让spray-can接管所有连接的管理   
+
+
+## spray-can配置说明
 
     spray.can {
       client {
