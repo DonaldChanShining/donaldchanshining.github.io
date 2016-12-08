@@ -1,6 +1,6 @@
 ---
 layout: default
-title: Spray学习总结
+title: 2016-09-27 Spray学习总结
 ---
 
 ## spray是什么
@@ -10,13 +10,137 @@ spray是一个基于akka的轻量级的scala库，并提供服务端和客户端
 2.基于Akka的Actor模型和Future  
 3.高性能（特别体现在Spray低层次的组件设计上，可以在高负载的情况下高性能的运行）  
 4.轻量级  
-5.模块化，松耦合  
+5.模块化，松耦合    
 #### 使用背景
-笔者陆陆续续使用spray一年的过程中，主要是基于spray-routing和spray-can搭建应用为其他应用提供rest服务，
-使用过程中因为忽视了Spray-can的配置出现过一些问题，所以必须理解Spray中一些配置的含义，才能够更好更高效的
-使用和进行性能调优。本文会着重介绍spray-can的客户端的配置和spray对于配置的相关处理方式，理解相关的概念对
-日后akka-http的使用也有一定的帮助。
+笔者陆陆续续使用spray一年的过程中，主要是基于`spray-routing`和`spray-can`搭建应用为其他应用提供rest服务，
+使用过程中因为忽视了`spray-can`的配置出现过一些问题，所以必须理解`Spray`中一些配置的含义，才能够更好更高效的
+使用和进行性能调优。本文是基于`spray`的官方文档，`io.kamon`的一篇介绍文章，以及个人的使用体会攥写而成。本文会着重介
+绍`spray-routing`的相关实现机制，`spray-can`的客户端的配置和`Spray`内部实现对于配置的相关处理方式，理解相关的概念对日后`akka-http`的使用也有一定的帮助。  
 
+## 小议spray-routing
+先结合一段代码来看，`spray-routing`提供服务的形式：
+    
+    object Main extends App with SimpleRoutingApp {
+    
+      implicit val system = ActorSystem("my-system")
+    
+      startServer(interface = "localhost", port = 8080) {
+        path("hello") {
+          get {
+            complete {
+              <h1>Say hello to spray</h1>
+            }
+          }
+        }
+      }
+    }
+    
+可以看出，`spray`以一种比较简洁直观的方式来提供服务，熟练之后，可以非常高效的进行相关开发但是需要对`spray`自身的DSL有一定的了解。  
+这里必须提及到两个概念：`Route`和 `Directives`。
+
+#### Route
+我们先看代码中对`Route`的定义：
+  
+    type Route = RequestContext => Unit
+    
+可以看作一个方法类型的别名：接收 `RequestContext`作为参数，返回`Unit`.表面上看`Route`什么都不返回。  
+实际上我们看看RequestContext的定义和说明：
+
+    /**
+     * Immutable object encapsulating the context of an [[spray.http.HttpRequest]]
+     * as it flows through a ''spray'' Route structure.
+     */
+    case class RequestContext(request: HttpRequest, responder: ActorRef, unmatchedPath: Uri.Path) {
+    ...
+    }
+    
+当一个请求在`spray`的路由中流动（flow）时，包含了http请求及其在`route`中的上下文的不可变对象,从构造器的参数中也可以看出。  
+所有的请求会以一种连续性的形式（`continuation-style`）处理,通过`RequestContext`中的`responder`来实现，`responder`即
+响应该请求的actor引用.这种设计模式下我们可以以一种发后即忘（`fire-and-forget`）的方式发送`RequestContext`到另外的`Actor`,
+责任链向下传递，而不用担心如何处理发送后的各种结果。  
+当一个`Route`接收到一个`RequestContext`时，能进行下面三种操作之一：  
+1. 通过调用`requestContext.complete{....}`来完成这次请求，即使用`complete`方法返回一个`response`给调用的客户端作为对本次请求的响应
+2. 通过调用`requestContext.reject{....}`来拒绝这次请求，即使用`reject`方法表明这条`route`不接受本次请求
+3. 忽略这个请求，通常是由于错误导致的，客户端只能等到超时之后才会获取响应  
+所以，一般设计的正常工作的`route`，当请求进入时需要以`complete`或者`reject`结束一个请求的处理。    
+我们下面看看一个相对复杂的`route`的构成：
+    
+    val route =
+      a {
+        b {
+          c {
+            ... // route 1
+          } ~
+          d {
+            ... // route 2
+          } ~
+          ... // route 3
+        } ~
+        e {
+          ... // route 4
+        }
+      }
+      
+`~`为`spray`自定义的连接`route`的操作符。
+可以看出，一个整体的`route`由若干个自定义的小`route`构成，请求在之间至上而下流动，直到被`complete`。而`route`之间的a,b,c,d,e（包括上例中的定义请求方的`get`）
+都可以看作`Directive0`，实际使用中既可以是预定义的形式，也可以是自定义的形式，请求在传递过程中，通过`Directive0`可以进行权限过滤，转换等操作，来实现业务的功能。  
+     
+#### Directive
+同上，我们先看看`Directive0`的代码定义：
+    
+      type Directive0 = Directive[HNil]
+
+`Directive`的代码定义：
+      
+      abstract class Directive[L <: HList] { self ⇒
+        def happly(f: L ⇒ Route): Route 
+        ...
+      }  
+      
+`HList`的代码定义：
+
+      /**  `HList` ADT base trait */
+      sealed trait HList
+            
+`Directive`是一个需要实现`happly`方法的抽象类，`happly`是一个接受协变于`HList`的类型作为参数，返回Route类型的方法。这也可以解释上文`route`的构成中
+a,b这样的可以看作`Directive0`。  
+官方文档中对`Directive`的描述：`Directives`是可以用来构造任意复杂的`route`结构的建筑单元。下面来解剖一个`Directive`：
+       
+       name(arguments) { extractions =>
+         ... // inner Route
+       }
+
+可以看出，一个`Directive`有一个命名，零个或者若干个参数，内部可能会包含一个内层`Route`。此外，`directives`能够提取一些值并使它们对于内层的`Route`透明可用，
+并使这些值作为内层`Route`的方法参数。  
+一个`Directive`能完成以下功能的一项或多项：
+1. 在将输入的`RequestContext`传入内层的`Route`之前，将其进行转换
+2. 通过自定义的业务逻辑过滤掉不需要的`RequestContext`
+3. 从`RequestContext`中提取值，并使它们以`extractions`的形式被内层的`Route`使用
+4. 完成请求   
+其中第一点需要额外讨论一下，`RequestContext`是传递在`route`结构中的核心对象，当然也可以传递在`actors`之间，拥有不可变，轻量级，能被快速复制的特性。
+当`directive`接收一个`RequestContext`实例对象时，它能决定是不做改变的传递这个实例到内层的`Route`或者是新建一个`RequestContext`的实例的副本，对副本进行一些改变，
+然后传递这个副本到内层的`Route`。这样做会对两件事情有帮助：  
+1. 转换`HttpRequest`的实例
+2. 添加另外一个转换`response`的方法的挂钩（`hook in`）到响应链（`responder chain`）中  
+为了进一步理解`responder chain`的流程，看看`complete`的方法调用时发生了什么，以下述代码做解析：   
+
+    foo {
+      bar {
+        baz {
+          ctx => ctx.complete("Hello")
+        }
+      }
+    }
+    
+假设`foo`和`baz`的钩住响应转换的逻辑，而`bar`留下`RequestContext`的`responder`，它在传递不变的`RequestContext`到内层的`route`之前。下面
+解释当`complete("Hello")`调用时发生了什么：
+1. `complete`会方法创建一个`HttpResponse`并将其发送给`RequestContext`中的响应者（即`responder`）
+2. 运行`baz`提供的响应转化的逻辑，并发送运行结果到`baz`接收到的`RequestContext`中的响应者(`responder`) 
+3. 运行`foo`提供的响应转化的逻辑，并发送运行结果到`foo`接收到的`RequestContext`中的响应者(`responder`)
+4. 原始的`RequestContext`的响应者（`responder`），即发送`http`请求的`ActorRef`，接收到响应并将它返回给客户端。  
+如你所见，所有的响应的处理逻辑合成了一个`directive`能选择挂钩在何处的逻辑处理链。  
+     
+            
 ## 小议spray-can
 spray-can模块是基于spray-io开发的低层次，低开销，高性能的http服务端和客户端。服务端和客户端都是纯异步，无锁，完全用scala编写（基于Akka）.
 因为API的核心都围绕着Akka的抽象类型编写（如Actor和Future），所以spray-can可以很容易的集成到我们基于Akka的应用当中。
@@ -34,11 +158,12 @@ spray-can并没有经典http服务端的核心特性（如请求路由，文件�
 spray-can的客户端实现上拥有着和服务端同样的优势（无锁，纯异步orz）。此外提供了三种不同层次的抽象供用户使用，抽象层次从低到高：  
 ###### Connection-level  
 用户完全掌握http连接的打开/关闭和期间进入的请求如何传递，处理，由哪个连接返回响应。提供了最高的灵活性，同时也带来了最低的便利性。  
-     
 ###### Host-level  
-让spray-can管理特定host的连接池  
+spray-can管理特定host的连接池  
 ###### Request-level  
-让spray-can接管所有连接的管理   
+spray-can接管所有连接的管理   
+
+
 
 
 ## spray-can配置说明
