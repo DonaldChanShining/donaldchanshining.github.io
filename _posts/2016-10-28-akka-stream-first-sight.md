@@ -4,7 +4,8 @@ title: 2016-10-28 初识Akka Stream
 ---
 
 ## Introduction
-本文主要翻译了*akka-stream*的官方文档中的相关基础介绍部分，并加上笔者使用过程中的部分体验。
+本文主要翻译了*akka-stream*的官方文档中的相关基础介绍部分，并加上笔者使用过程中的部分体验。    
+
 ## Motivation
 我们现在从互联网上获取的服务的方式中包含很多流式数据处理的实例，如从一个服务中进行下载和上传，或者点到点（p2p）数据传输。把数据当作一个包含很多元素的流，而不是一个整体，
 这种想法非常有用，因为这种想法符合电脑发送和收到数据的方式（例如通过tcp传输），但是它通常也是一种必要条件，因为数据集通常变得很大而不能作为一个整体被处理。我们通过
@@ -54,9 +55,10 @@ title: 2016-10-28 初识Akka Stream
 计算结果，这生成了一系列阶乘数字我们藏匿到*source*中为了以后的使用，这很重要记住--没有任何东西已经实际上被计算了。这只是一个当我们运行
 这个流时我们想执行一次的计算的描述。然后我们转换这一系列的数字结果到一个流包含了*ByteString*对象来描述一个*text*文件中的行。这个流接着
 通过连接一个文件运行，作为数据的接收者。在*akka-stream*的科技中这被叫做*sink*（水槽）。*IOResult*是*akka-stream*中*IO*操作的一个返回类型，
-用来告诉你多少比特或者元素被消费，这个流的中断是正常还是异常。
+用来告诉你多少比特或者元素被消费，这个流的中断是正常还是异常。    
+
        
-##Reusable Pieces
+## Reusable Pieces
        
 *akka-stream*一个很好的部分就是（其他流式库并不提供的）不仅仅*source*能被重用作蓝图，所有其他的元素也能够被这样使用。我们能拿到文件，
 写入*Sink*，前缀操作步骤必须去获取*ByteString*元素从输入的字符串和包中的操作也能成为被重用的部分。因为写这些流的语言通常从左边流到右边，
@@ -73,8 +75,11 @@ title: 2016-10-28 初识Akka Stream
 我们能使用我们刚刚创造的崭新的*Sink*,通过连接它到我们的阶乘源，通过一小段适配后去将数字转化为字符串:
           
        factorials.map(_.toString).runWith(lineSink("factorial2.txt"))
-       
-##Time-Based Processing
+     
+            
+            
+           
+## Time-Based Processing
        
 当我们看一个更有参与度的例子之前，我们探讨下*akka-stream*能做的流式处理的本质。从阶乘元素数据源开始，我们通过和另外一个流进行拉链操作来转换这个流，
 通过一个数据源提供0-100的数字，第一个数字被阶乘源提交的是阶乘0，第二个是1的阶乘，我们合并这两个通过生成字符串如“3！=6”
@@ -160,7 +165,7 @@ title: 2016-10-28 初识Akka Stream
      
     authors.runWith(Sink.foreach(println))
     
-##flattening sequences in streams
+## flattening sequences in streams
     
 在之前的章节我们工作在1:1的元素对应关系上，通常大多数通常情况就是这样。但是有时候，我们也许想将一个元素映射为一定数量的元素，然后收到
 一个达到打倒(*flattened*)的*stream*，就像*flatMap*工作在*scala*集合上一样，为了获取一个包含*hashTags*的*flattened stream*,我们可以使用*mapConcat*这个
@@ -168,7 +173,7 @@ title: 2016-10-28 初识Akka Stream
     
     val hashtags: Source[Hashtag, NotUsed] = tweets.mapConcat(_.hashtags.toList)
     
-##broadcasting a stream
+## broadcasting a stream
 
 我们现在想持久化所有的*hash-tags*，同样也持久化所有作者名字从这个活的*stream*。例如我们乐意去将所有的作者的句柄写进一个文件，所有*hash-tags*
 写入硬盘中的另外一个文件。这意味着我们不得不将一个数据源流分割为两个流来处理写入两个不同的文件。      
@@ -223,7 +228,7 @@ graphs变成一个巨大的数据结构，被详细介绍在稍后的文章中�
 这个*buffer*元素带着一个显式的和必须的*OverflowStrategy*，这定义了*buffer*当它满的时候接收到了一个元素该如何处理新进入的元素。策略提供了包括扔掉最老的元素（*dropHead*）,
 扔掉多余的*buffer*，显示错误等方式。确定和选择最适合你的使用场景的策略。
       
-##Material values
+## Material values
       
 到现在为止，我们仅仅使用*Flows*处理了数据，然后消费数据到外部的*sink*-打印出来或者存储到外部的系统。然而有时候我们也许对一些能从*materialized*中获取，能被
 管线化（*pipeline*）处理的数据更感兴趣。例如，我们想要知道我们处理了多少*tweets*.这个问题的答案并不好明显的给出答案，因为无限的*tweets*流（一个解决这个问
