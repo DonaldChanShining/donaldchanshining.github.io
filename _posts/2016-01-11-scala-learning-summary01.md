@@ -1,6 +1,6 @@
 ---
 layout: default
-title: 2016-09-27 Scala学习总结(一)
+title: 2016-01-11 Scala学习总结(一)
 ---
 
 # 一、	前言
