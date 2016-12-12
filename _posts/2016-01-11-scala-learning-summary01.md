@@ -1,3 +1,8 @@
+---
+layout: default
+title: 2016-09-27 Scala学习总结(一)
+---
+
 # 一、	前言
 [Scala](http://www.scala-lang.org/)是一种混合了面向对象编程和函数式编程的特性的语言，由于我本人是从java转向Scala的，所以本文侧重于介绍总结和展示我在学习过程中使用函数式编程的一些体验。  
 
